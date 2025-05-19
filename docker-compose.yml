@@ -2,7 +2,7 @@
 services:
   rmq:
     image: rabbitmq:4.1.0-management
-    container_name: trakto-rmq
+    container_name: broker-rmq
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -14,6 +14,6 @@ services:
         - ./rabbitmq/logs:/var/log/rabbitmq
   db:
     image: mongo
-    container_name: trakto-db
+    container_name: mongo-db
     ports:
       - "27017:27017"

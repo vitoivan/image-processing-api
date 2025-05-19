@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const defaultOpts: mongoose.ConnectOptions = {
-	dbName: "trakto",
+	dbName: "database",
 	minPoolSize: 5,
 	maxPoolSize: 20,
 	bufferCommands: false

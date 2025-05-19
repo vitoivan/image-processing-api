@@ -1,5 +1,5 @@
 {
-  "name": "trakto-backend-challenge",
+  "name": "image-processing-api",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
