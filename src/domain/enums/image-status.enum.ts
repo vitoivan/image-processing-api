@@ -1,0 +1,6 @@
+export enum ImageStatusEnum {
+	PROCESSING = "PROCESSING",
+	PROCESSED = "PROCESSED",
+	COMPLETED = "COMPLETED",
+	FAILED = "FAILED"
+}
