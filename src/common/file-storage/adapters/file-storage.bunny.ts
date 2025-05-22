@@ -2,12 +2,14 @@ import { PassThrough, Readable } from "stream";
 import { envs } from "../../env";
 import { request, RequestOptions } from "https";
 import { HttpError } from "../../http-error";
-import { errorMonitor } from "events";
+import { Logger } from "../../utils/logger";
 
 class BunnyStorageAdapter {
 	private static host = envs.BUNNY_STORAGE_HOSTNAME;
 	private static storageName = envs.BUNNY_STORAGE_NAME;
 	private static apiKey = envs.BUNNY_STORAGE_API_KEY;
+
+	private logger = new Logger("BunnyStorageAdapter")
 
 
 	sendFile(fileStream: Readable, filename: string): Promise<void> {
@@ -25,7 +27,7 @@ class BunnyStorageAdapter {
 
 			const req = request(options, (res) => {
 				res.on('data', (chunk) => {
-					console.log(chunk.toString('utf8'));
+					this.logger.log(chunk.toString('utf8'));
 				});
 			});
 

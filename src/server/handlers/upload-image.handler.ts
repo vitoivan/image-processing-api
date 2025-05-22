@@ -73,12 +73,9 @@ async function uploadImageHandler(req: Request, res: Response) {
 		sendError(err)
 	}
 
-
-
 	busboy.on("file", onFileUpload);
 	busboy.on("finish", onFinish);
 	busboy.on("error", onError);
-
 
 	await pipelineAsync(req, busboy)
 }

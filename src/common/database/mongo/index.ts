@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { envs } from "../../env";
 import { NodeEnv } from "../../enums/nodeEnv";
+import { Logger } from "../../utils/logger";
 
 const defaultOpts: mongoose.ConnectOptions = {
 	dbName: "database",
@@ -15,6 +16,8 @@ const defaultOpts: mongoose.ConnectOptions = {
 
 class MongoDBAdapter {
 
+	private static logger = new Logger("MongoDBAdapter")
+
 	static isTest() {
 		return envs.NODE_ENV === NodeEnv.TEST
 	}
@@ -23,13 +26,13 @@ class MongoDBAdapter {
 		if (this.isTest()) {
 			return
 		}
-		mongoose.connection.on('connecting', () => console.log('[Mongodb] connectiong ...'));
-		mongoose.connection.on('connected', () => console.log('[Mongodb] connected'));
-		mongoose.connection.on('open', () => console.log('[Mongodb] open'));
-		mongoose.connection.on('disconnected', () => console.log('[Mongodb] disconnected'));
-		mongoose.connection.on('reconnected', () => console.log('[Mongodb] reconnected'));
-		mongoose.connection.on('disconnecting', () => console.log('[Mongodb] disconnecting ...'));
-		mongoose.connection.on('close', () => console.log('[Mongodb] close'));
+		mongoose.connection.on('connecting', () => this.logger.log('connectiong ...'))
+		mongoose.connection.on('connected', () => this.logger.log('connected'));
+		mongoose.connection.on('open', () => this.logger.log('open'));
+		mongoose.connection.on('disconnected', () => this.logger.log('disconnected'));
+		mongoose.connection.on('reconnected', () => this.logger.log('reconnected'));
+		mongoose.connection.on('disconnecting', () => this.logger.log('disconnecting ...'));
+		mongoose.connection.on('close', () => this.logger.log('close'));
 
 		await mongoose.connect(mongoURI, opts)
 	}

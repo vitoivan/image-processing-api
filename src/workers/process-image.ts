@@ -12,6 +12,7 @@ import sharp from "sharp"
 import { ImageStatusEnum } from "../domain/enums/image-status.enum"
 import { messageBroker } from "../common/message-broker"
 import { Readable } from "stream"
+import { Logger } from "../common/utils/logger"
 
 enum OptimizationLevel {
 	Low = "low",
@@ -44,9 +45,11 @@ type GenerateOptimizedImageParams = {
 	format: ImageFormat,
 }
 
+const logger = new Logger("ProcessImageWorker")
+
 async function generateOptimizedImage({ buffer, level, format }: GenerateOptimizedImageParams) {
 
-	console.log("Generating optimized image ...")
+	logger.log("Generating optimized image ...")
 	const image = sharp(buffer)
 	let width = resizeMap[level]
 
@@ -78,7 +81,7 @@ async function uploadImageToStorage(buffer: Buffer<ArrayBuffer>, id: string) {
 
 async function processImage({ content }: TBrokerMessageDTO): Promise<void> {
 
-	console.log("Received message: ", content)
+	logger.log(`received message image ${JSON.stringify(content)}`)
 	const { data: { id } } = content as { data: { id: string } }
 
 	if (!id) {
@@ -173,7 +176,7 @@ async function processImage({ content }: TBrokerMessageDTO): Promise<void> {
 		if (!await imagesRepository.setProcessingSuccess(image.taskId)) {
 			throw new Error("Cannot set image status to processed")
 		}
-		console.log("Image processed successfully")
+		logger.log("Image processed successfully")
 	} catch (err) {
 		await imagesRepository.setProcessingError(image.taskId, (err as Error).message)
 		throw err
@@ -194,9 +197,9 @@ async function runWorker() {
 
 if (require.main) {
 	runWorker().then(() => {
-		console.log("worker process image running")
+		logger.log("worker process image running")
 	}).catch((err) => {
-		console.error(err)
+		logger.error(err)
 	})
 }
 

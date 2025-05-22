@@ -6,17 +6,19 @@ import { envs } from "../common/env"
 import { RabbitMQAdapter } from "../common/message-broker/adapters/rabbitmq"
 import { MongoDBAdapter } from "../common/database/mongo"
 import { createServer } from "http"
+import { defaultLogger } from "../common/utils/logger"
 
 
 function listenToUncaughtExceptions() {
 	process.on("uncaughtException", (err) => {
-		console.error("Uncaught Exception:", err)
+		defaultLogger.error(`Uncaught Exception: ${err.message}`)
 	})
 
 	process.on("unhandledRejection", (reason) => {
-		console.error("Unhandled Rejection:", reason)
+		defaultLogger.error(`Uncaught Rejection: ${reason}`)
 	})
 }
+
 
 async function init() {
 	await MongoDBAdapter.init(envs.MONGO_URI)
@@ -26,7 +28,7 @@ async function init() {
 		exchange: envs.RABBITMQ_EXCHANGE
 	})
 
-	console.log("Starting server ...")
+	defaultLogger.log("Starting server ...")
 	const app = express()
 
 	registerMiddlewares(app)
@@ -35,10 +37,10 @@ async function init() {
 
 	server.listen(envs.PORT, (err?: Error) => {
 		if (err) {
-			console.error(`Error starting server: ${err.message}`)
+			defaultLogger.error(`Error starting server: ${err.message}`)
 			return
 		}
-		console.log(`Application started at http://localhost:${envs.PORT}`)
+		defaultLogger.log(`Application started at http://localhost:${envs.PORT}`)
 	})
 }
 

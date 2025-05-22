@@ -3,8 +3,7 @@ import { MessageBrokerPort } from '../ports/message-broker.port';
 import { envs } from '../../env';
 import { NodeEnv } from '../../enums/nodeEnv';
 import { TBrokerMessageDTO } from '../dtos/broker-message.dto';
-import { parse } from 'path';
-import { BunnyStorageAdapter } from '../../file-storage/adapters/file-storage.bunny';
+import { Logger } from '../../utils/logger';
 
 type RabbitMQAdapterConfig = {
 	uri: string,
@@ -16,6 +15,7 @@ type RabbitMQAdapterConfig = {
 class RabbitMQAdapter implements MessageBrokerPort {
 	private static conn: amqp.Connection | null = null;
 	private static channel: amqp.Channel | null = null;
+	private static logger = new Logger("RabbitMQAdapter")
 
 	private static isTest() {
 		return envs.NODE_ENV === NodeEnv.TEST
@@ -52,7 +52,7 @@ class RabbitMQAdapter implements MessageBrokerPort {
 		if (RabbitMQAdapter.conn && RabbitMQAdapter.channel) {
 			return;
 		}
-		console.log("Initializing RabbitMQ ...")
+		this.logger.log("Initializing RabbitMQ ...")
 		if (!config) {
 			throw new Error("RabbitMQ config not found")
 		}
@@ -66,7 +66,7 @@ class RabbitMQAdapter implements MessageBrokerPort {
 		RabbitMQAdapter.conn = connection;
 		RabbitMQAdapter.channel = channel;
 
-		console.log("RabbitMQ initialized")
+		this.logger.log("RabbitMQ initialized")
 	}
 
 	private getChannel() {
@@ -127,14 +127,14 @@ class RabbitMQAdapter implements MessageBrokerPort {
 				try {
 					return JSON.parse(content.toString() || '{}') as { data: Record<string, any>, retries: number }
 				} catch (err) {
-					console.error(`Error parsing message: ${(err as Error).message}`)
+					RabbitMQAdapter.logger.error(`Error parsing message: ${(err as Error).message}`)
 					throw err
 				}
 			}
 
 
 			if (!msg) {
-				console.error("Message not found")
+				RabbitMQAdapter.logger.error("Message not found")
 				return
 			}
 
@@ -146,12 +146,12 @@ class RabbitMQAdapter implements MessageBrokerPort {
 				parsedContent = parseContent(content)
 
 				if (Object.keys(parsedContent).length === 0) {
-					console.error("Message content is empty")
+					RabbitMQAdapter.logger.error("Message content is empty")
 					return chann.ack(msg)
 				}
 
 				if (RabbitMQAdapter.getRetryCount(parsedContent) >= envs.RABBITMQ_RETRIES_TRESHOLD) {
-					console.error("Message retries threshold exceeded")
+					RabbitMQAdapter.logger.error("Message retries threshold exceeded")
 					/* TODO: send to a dead letter queue
 					 * im doing this because i want to keep the queue clean for test purposes,
 					 * and its faster than setting up a dead letter queue
@@ -159,7 +159,7 @@ class RabbitMQAdapter implements MessageBrokerPort {
 					return chann.ack(msg)
 				}
 			} catch (err) {
-				console.error(`Error parsing message: ${(err as Error).message}`)
+				RabbitMQAdapter.logger.error(`Error parsing message: ${(err as Error).message}`)
 				/* TODO: send to a dead letter queue
 				 * im doing this because i want to keep the queue clean for test purposes,
 				 * and its faster than setting up a dead letter queue
@@ -175,10 +175,10 @@ class RabbitMQAdapter implements MessageBrokerPort {
 					headers: properties.headers || {}
 				}
 			}).then(() => {
-				console.log("Message processed successfully")
+				RabbitMQAdapter.logger.log("Message processed successfully")
 				chann.ack(msg)
 			}).catch((err) => {
-				console.log(`Error processing message: ${(err as Error).message}`)
+				RabbitMQAdapter.logger.error(`Error processing message: ${(err as Error).message}`)
 
 				const newContent = RabbitMQAdapter.appendRetryField(
 					parsedContent,
@@ -191,6 +191,7 @@ class RabbitMQAdapter implements MessageBrokerPort {
 					}
 					return chann.ack(msg)
 				} catch (err) {
+					RabbitMQAdapter.logger.error(`Error requeuing message: ${(err as Error).message}`)
 					return chann.nack(msg)
 				}
 
