@@ -14,7 +14,6 @@ const envSchema = z.object({
 	BUNNY_STORAGE_NAME: z.string().optional(),
 	BUNNY_STORAGE_API_KEY: z.string().optional(),
 	BUNNY_STORAGE_HOSTNAME: z.string().optional(),
-
 });
 
 const envs = envSchema.parse(process.env);

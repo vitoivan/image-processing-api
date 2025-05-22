@@ -3,8 +3,9 @@ import { envs } from "../../env";
 import { request, RequestOptions } from "https";
 import { HttpError } from "../../http-error";
 import { Logger } from "../../utils/logger";
+import { FileStoragePort } from "../ports/file-storage.port";
 
-class BunnyStorageAdapter {
+class BunnyStorageAdapter implements FileStoragePort {
 	private static host = envs.BUNNY_STORAGE_HOSTNAME;
 	private static storageName = envs.BUNNY_STORAGE_NAME;
 	private static apiKey = envs.BUNNY_STORAGE_API_KEY;
