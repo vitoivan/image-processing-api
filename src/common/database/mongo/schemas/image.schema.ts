@@ -16,15 +16,15 @@ const versionsSchema = new MongooseSchema({
 const originalMetadataSchema = new MongooseSchema({
 	width: {
 		type: Number,
-		required: [true, "field original_metadata.width is required"],
+		required: false,
 	},
 	height: {
 		type: Number,
-		required: [true, "field original_metadata.height is required"],
+		required: false,
 	},
 	mimetype: {
 		type: String,
-		required: [true, "field original_metadata.mimetype is required"],
+		required: false,
 	},
 	exif: {
 		type: Map,

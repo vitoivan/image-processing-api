@@ -33,6 +33,37 @@ class ImagesMongoRepository implements ImageRepositoryPort {
 
 		return images.map(image => this.mapToEntity(image))
 	}
+
+	async insert(image: ImageEntity): Promise<ImageEntity> {
+		const newImage = new this.model({
+			task_id: image.taskId,
+			original_filename: image.originalFilename,
+			status: image.status,
+			original_metadata: image.originalMetadata ? {
+				width: image.originalMetadata.width,
+				height: image.originalMetadata.height,
+				mimetype: image.originalMetadata.mimetype,
+				exif: image.originalMetadata.exif
+			} : null,
+			processed_at: image.processedAt || null,
+			error_message: image.errorMessage || "",
+			versions: {
+				low: image.versions?.low || null,
+				medium: image.versions?.medium || null,
+				high_optimized: image.versions?.high_optimized || null
+			}
+		})
+		const saved = await newImage.save()
+		return this.mapToEntity(saved)
+	}
+
+	async getByTaskId(taskId: string): Promise<ImageEntity | null> {
+		const image = await this.model.findOne({ task_id: taskId }).exec()
+		if (!image) {
+			return null
+		}
+		return this.mapToEntity(image)
+	}
 }
 
 export { ImagesMongoRepository }
