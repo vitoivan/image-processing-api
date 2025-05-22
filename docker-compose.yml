@@ -1,5 +1,45 @@
 
 services:
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/server.Dockerfile
+    container_name: image-processing-api.server
+    ports:
+      - "8080:3000"
+    depends_on:
+      - rmq
+      - db
+    environment:
+      NODE_ENV: "production"
+      MONGO_URI: "mongodb://db:27017/trakto"
+      RABBITMQ_URI: "amqp://admin:admin@rmq:5672"
+      RABBITMQ_QUEUE: "images.process"
+      RABBITMQ_EXCHANGE: "images"
+      STORAGE_TYPE: "local"
+      # BUNNY_STORAGE_NAME: "victor-cdn-storage"
+      # BUNNY_STORAGE_API_KEY: "<API_KEY>"
+      # BUNNY_STORAGE_HOSTNAME: "br.storage.bunnycdn.com"
+  worker:
+    build:
+      context: .
+      dockerfile: ./docker/worker.Dockerfile
+    container_name: image-processing-api.worker
+    ports:
+      - "3333:3000"
+    depends_on:
+      - rmq
+      - db
+    environment:
+      NODE_ENV: "production"
+      MONGO_URI: "mongodb://db:27017/trakto"
+      RABBITMQ_URI: "amqp://admin:admin@rmq:5672"
+      RABBITMQ_QUEUE: "images.process"
+      RABBITMQ_EXCHANGE: "images"
+      STORAGE_TYPE: "local"
+      # BUNNY_STORAGE_NAME: "victor-cdn-storage"
+      # BUNNY_STORAGE_API_KEY: "<API_KEY>"
+      # BUNNY_STORAGE_HOSTNAME: "br.storage.bunnycdn.com"
   rmq:
     image: rabbitmq:4.1.0-management
     container_name: broker-rmq

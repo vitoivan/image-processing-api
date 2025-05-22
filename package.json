@@ -5,9 +5,10 @@
   "scripts": {
     "start": "node dist/src/server/server.js",
     "test": "jest",
-    "build": "tsc",
+    "build": "node_modules/typescript/bin/tsc",
     "dev": "nodemon src/server/server.ts",
-    "worker:process-image": "ts-node src/workers/process-image.ts"
+    "worker:process-image:dev": "ts-node src/workers/process-image.ts",
+    "worker:process-image:prod": "node dist/src/workers/process-image.js"
   },
   "keywords": [],
   "author": "",
@@ -31,7 +32,6 @@
     "supertest": "^7.1.1",
     "ts-jest": "^29.3.4",
     "ts-node": "^10.9.2",
-    "tsc": "^2.0.4",
     "typescript": "^5.8.3"
   },
   "dependencies": {

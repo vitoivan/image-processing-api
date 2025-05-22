@@ -11,11 +11,15 @@ function getStorageRepository(): FileStoragePort {
 		return new InMemoryStorageAdapter()
 	}
 
-	if (envs.NODE_ENV === NodeEnv.DEVELOPMENT) {
+	if (envs.STORAGE_TYPE === "local") {
 		return new DiskStorageAdapter()
 	}
 
-	return new BunnyStorageAdapter()
+	if (envs.STORAGE_TYPE === "bunny") {
+		return new BunnyStorageAdapter()
+	}
+
+	throw new Error(`Unknown storage type ${envs.STORAGE_TYPE}`)
 }
 
 const storageRepository = getStorageRepository()
