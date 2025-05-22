@@ -79,7 +79,7 @@ async function uploadImageToStorage(buffer: Buffer<ArrayBuffer>, id: string) {
 async function processImage({ content }: TBrokerMessageDTO): Promise<void> {
 
 	console.log("Received message: ", content)
-	const { id } = content as { id: string }
+	const { data: { id } } = content as { data: { id: string } }
 
 	if (!id) {
 		throw new Error("Id not found on message content")

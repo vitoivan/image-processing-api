@@ -4,6 +4,7 @@ import { envs } from '../../env';
 import { NodeEnv } from '../../enums/nodeEnv';
 import { TBrokerMessageDTO } from '../dtos/broker-message.dto';
 import { parse } from 'path';
+import { BunnyStorageAdapter } from '../../file-storage/adapters/file-storage.bunny';
 
 type RabbitMQAdapterConfig = {
 	uri: string,
@@ -80,7 +81,36 @@ class RabbitMQAdapter implements MessageBrokerPort {
 			return
 		}
 		const chann = this.getChannel()
-		chann.sendToQueue(queue, Buffer.from(JSON.stringify(data)))
+
+		const message = RabbitMQAdapter.appendRetryField(
+			{ data },
+			RabbitMQAdapter.getRetryCount(data)
+		)
+
+		chann.sendToQueue(queue, Buffer.from(JSON.stringify(message)))
+	}
+
+	static appendRetryField<T>(data: T = {} as T, retries: any): T & { retries: number } {
+		const dataWithRetries: T & { retries: number } = { ...data, retries: 0 }
+
+		let retriesCount = Number(retries || 0)
+		if (isNaN(retriesCount)) {
+			retriesCount = 0
+		}
+
+		dataWithRetries.retries = retriesCount
+		return dataWithRetries
+	}
+
+	static getRetryCount(data: { retries?: number }) {
+		if (!data) {
+			return 0
+		}
+		const count = Number(data.retries || 0)
+		if (isNaN(count)) {
+			return 0
+		}
+		return count
 	}
 
 	listenToQueue(queue: string, callback: (message: TBrokerMessageDTO) => Promise<void>): void {
@@ -91,34 +121,80 @@ class RabbitMQAdapter implements MessageBrokerPort {
 		const chann = this.getChannel()
 
 		function handleMessage(msg: amqp.Message | null) {
+
+
+			function parseContent(content: Buffer) {
+				try {
+					return JSON.parse(content.toString() || '{}') as { data: Record<string, any>, retries: number }
+				} catch (err) {
+					console.error(`Error parsing message: ${(err as Error).message}`)
+					throw err
+				}
+			}
+
+
 			if (!msg) {
 				console.error("Message not found")
 				return
 			}
+
+			const { content, properties } = msg
+
+			let parsedContent: ReturnType<typeof parseContent>
 			try {
-				const { content, properties } = msg
-				const parsedContent = JSON.parse(content.toString() || '{}')
+
+				parsedContent = parseContent(content)
+
 				if (Object.keys(parsedContent).length === 0) {
 					console.error("Message content is empty")
-					return
+					return chann.ack(msg)
 				}
-				callback({
-					content: parsedContent as Record<string, any>,
-					properties: {
-						headers: properties.headers || {}
-					}
-				}).then(() => {
-					chann.ack(msg)
-				}).catch((_err) => {
-					const err = _err as Error
-					console.log(`Error processing message: ${err.message}`)
-					chann.nack(msg)
-				})
-			} catch (_err) {
-				const err = _err as Error
-				console.log(`Error processing message: ${err.message}`)
-				chann.nack(msg)
+
+				if (RabbitMQAdapter.getRetryCount(parsedContent) >= envs.RABBITMQ_RETRIES_TRESHOLD) {
+					console.error("Message retries threshold exceeded")
+					/* TODO: send to a dead letter queue
+					 * im doing this because i want to keep the queue clean for test purposes,
+					 * and its faster than setting up a dead letter queue
+					*/
+					return chann.ack(msg)
+				}
+			} catch (err) {
+				console.error(`Error parsing message: ${(err as Error).message}`)
+				/* TODO: send to a dead letter queue
+				 * im doing this because i want to keep the queue clean for test purposes,
+				 * and its faster than setting up a dead letter queue
+				*/
+				return chann.ack(msg)
 			}
+
+
+
+			callback({
+				content: parsedContent,
+				properties: {
+					headers: properties.headers || {}
+				}
+			}).then(() => {
+				console.log("Message processed successfully")
+				chann.ack(msg)
+			}).catch((err) => {
+				console.log(`Error processing message: ${(err as Error).message}`)
+
+				const newContent = RabbitMQAdapter.appendRetryField(
+					parsedContent,
+					RabbitMQAdapter.getRetryCount(parsedContent) + 1
+				)
+
+				try {
+					if (!chann.sendToQueue(queue, Buffer.from(JSON.stringify(newContent)))) {
+						throw new Error("Error while requeuing  message to queue")
+					}
+					return chann.ack(msg)
+				} catch (err) {
+					return chann.nack(msg)
+				}
+
+			})
 		}
 		chann.consume(queue, handleMessage, { noAck: false })
 
