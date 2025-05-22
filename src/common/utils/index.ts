@@ -4,9 +4,16 @@ import { buildHttpError } from "./build-http-error";
 
 const pipelineAsync = promisify(pipeline);
 
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms)
+	})
+}
+
 export {
 	pipelineAsync,
 	promisify,
-	buildHttpError
+	buildHttpError,
+	sleep
 }
 

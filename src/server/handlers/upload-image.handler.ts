@@ -59,7 +59,7 @@ async function uploadImageHandler(req: Request, res: Response) {
 					},
 				}
 			})
-			sendFileUploadedEventService({
+			await sendFileUploadedEventService({
 				file: inserted,
 				messageBroker: messageBroker,
 			})

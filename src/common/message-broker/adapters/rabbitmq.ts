@@ -109,8 +109,14 @@ class RabbitMQAdapter implements MessageBrokerPort {
 					}
 				}).then(() => {
 					chann.ack(msg)
+				}).catch((_err) => {
+					const err = _err as Error
+					console.log(`Error processing message: ${err.message}`)
+					chann.nack(msg)
 				})
-			} catch (err) {
+			} catch (_err) {
+				const err = _err as Error
+				console.log(`Error processing message: ${err.message}`)
 				chann.nack(msg)
 			}
 		}

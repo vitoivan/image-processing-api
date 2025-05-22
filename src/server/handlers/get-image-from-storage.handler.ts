@@ -15,7 +15,7 @@ async function getImageFromStorageHandler(req: Request, res: Response) {
 
 		const fileStream = await downloadFileService({
 			storageRepository: storageRepository,
-			id: imageMetadata.getOriginalFilePath()
+			id: imageMetadata.getOriginalStoragePath()
 		})
 
 		await pipelineAsync(fileStream, res)

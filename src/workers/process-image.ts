@@ -7,13 +7,16 @@ import { getImageMetadataByTaskIdService } from "../domain/services/get-image-me
 import { imagesRepository } from "../repositories/images/repository"
 import { downloadFileService } from "../domain/services/download-file.service"
 import { storageRepository } from "../common/file-storage/repository"
-import { pipelineAsync } from "../common/utils"
+import { pipelineAsync, sleep } from "../common/utils"
 import sharp from "sharp"
+import { ImageStatusEnum } from "../domain/enums/image-status.enum"
+import { messageBroker } from "../common/message-broker"
+import { Readable } from "stream"
 
 enum OptimizationLevel {
 	Low = "low",
 	Medium = "medium",
-	High = "high"
+	High = "high_optimized"
 }
 
 enum ImageFormat {
@@ -24,15 +27,15 @@ enum ImageFormat {
 }
 
 const resizeMap = {
-	low: 320,
-	medium: 800,
-	high: null, // mantém dimensões originais
+	[OptimizationLevel.High]: 320,
+	[OptimizationLevel.Medium]: 800,
+	[OptimizationLevel.Low]: null,
 };
 
 const qualityMap = {
-	low: 40,
-	medium: 70,
-	high: 85,
+	[OptimizationLevel.Low]: 90,
+	[OptimizationLevel.Medium]: 65,
+	[OptimizationLevel.High]: 40,
 };
 
 type GenerateOptimizedImageParams = {
@@ -43,13 +46,13 @@ type GenerateOptimizedImageParams = {
 
 async function generateOptimizedImage({ buffer, level, format }: GenerateOptimizedImageParams) {
 
+	console.log("Generating optimized image ...")
 	const image = sharp(buffer)
-	const width = resizeMap[level]
+	let width = resizeMap[level]
 
 	const resizedImage = width ? image.resize({ width }) : image
 
 	const quality = qualityMap[level]
-	console.log("Generating optimized image ...", level, format, quality, width)
 
 	switch (format) {
 		case ImageFormat.JPEG:
@@ -67,10 +70,15 @@ async function generateOptimizedImage({ buffer, level, format }: GenerateOptimiz
 	}
 }
 
+async function uploadImageToStorage(buffer: Buffer<ArrayBuffer>, id: string) {
+	const stream = Readable.from(buffer)
+	await storageRepository.sendFile(stream, id)
+}
 
-async function processImage({ properties, content }: TBrokerMessageDTO): Promise<void> {
 
-	console.log("Received message: ", content, properties)
+async function processImage({ content }: TBrokerMessageDTO): Promise<void> {
+
+	console.log("Received message: ", content)
 	const { id } = content as { id: string }
 
 	if (!id) {
@@ -79,49 +87,97 @@ async function processImage({ properties, content }: TBrokerMessageDTO): Promise
 
 	const image = await getImageMetadataByTaskIdService({ imagesRepository: imagesRepository, taskId: id })
 
-	const fileStream = await downloadFileService({
-		storageRepository: storageRepository,
-		id: image.getOriginalFilePath()
-	})
+	if (!await imagesRepository.changeStatus(image.taskId, ImageStatusEnum.PROCESSING)) {
+		throw new Error("Cannot set image status to processing")
+	}
 
-	const bufferArray = Array<Buffer>()
+	try {
+		await sleep(1500) // wait 1.5 seconds before download file because it can take some time to be available in the bunny storage
+		const fileStream = await downloadFileService({
+			storageRepository: storageRepository,
+			id: image.getOriginalStoragePath()
+		})
 
-	const handleBytes = async (data: AsyncIterable<Buffer>) => {
-		for await (const chunk of data) {
-			bufferArray.push(chunk)
+		const bufferArray = Array<Buffer>()
+
+		const handleBytes = async (data: AsyncIterable<Buffer>) => {
+			for await (const chunk of data) {
+				bufferArray.push(chunk)
+			}
 		}
+
+		await pipelineAsync(fileStream, handleBytes)
+
+		const buffer = Buffer.concat(bufferArray)
+		const transform = sharp(buffer)
+
+		const originalMetadata = await transform.metadata()
+
+		image.originalMetadata = {
+			...image.originalMetadata,
+			width: originalMetadata.width,
+			height: originalMetadata.height,
+			exif: originalMetadata.exif || null,
+		}
+
+		if (!await imagesRepository.updateOriginalMetadata(image.taskId, image.originalMetadata)) {
+			throw new Error("Cannot update image original metadata")
+		}
+
+		const format = originalMetadata.format as any
+
+		const [low, medium, high] = await Promise.all([
+			generateOptimizedImage({ buffer, level: OptimizationLevel.Low, format }),
+			generateOptimizedImage({ buffer, level: OptimizationLevel.Medium, format }),
+			generateOptimizedImage({ buffer, level: OptimizationLevel.High, format }),
+		])
+
+		const [lowMeta, mediumMeta, highMeta] = await Promise.all([
+			sharp(low).metadata(),
+			sharp(medium).metadata(),
+			sharp(high).metadata(),
+		]);
+
+		await Promise.all([
+			uploadImageToStorage(low, image.getOptimizedStoragePath(OptimizationLevel.Low)),
+			uploadImageToStorage(medium, image.getOptimizedStoragePath(OptimizationLevel.Medium)),
+			uploadImageToStorage(high, image.getOptimizedStoragePath(OptimizationLevel.High)),
+		])
+
+		const updatedVersions = await imagesRepository.updateVersions({
+			task_id: image.taskId, versions: {
+				low: {
+					path: image.getOptimizedStoragePath(OptimizationLevel.Low),
+					width: lowMeta.width,
+					height: lowMeta.height,
+					size: lowMeta.size || 0,
+				},
+				medium: {
+					path: image.getOptimizedStoragePath(OptimizationLevel.Medium),
+					width: mediumMeta.width,
+					height: mediumMeta.height,
+					size: mediumMeta.size || 0,
+				},
+				high_optimized: {
+					path: image.getOptimizedStoragePath(OptimizationLevel.High),
+					width: highMeta.width,
+					height: highMeta.height,
+					size: highMeta.size || 0,
+				},
+
+			}
+		})
+		if (!updatedVersions) {
+			throw new Error("Cannot update image metadata versions")
+		}
+		if (!await imagesRepository.setProcessingSuccess(image.taskId)) {
+			throw new Error("Cannot set image status to processed")
+		}
+		console.log("Image processed successfully")
+	} catch (err) {
+		await imagesRepository.setProcessingError(image.taskId, (err as Error).message)
+		throw err
 	}
-
-
-	await pipelineAsync(fileStream, handleBytes)
-
-
-	const buffer = Buffer.concat(bufferArray)
-	const transform = sharp(buffer)
-
-	const originalMetadata = await transform.metadata()
-
-	image.originalMetadata = {
-		width: originalMetadata.width,
-		height: originalMetadata.height,
-		exif: originalMetadata.exif || null,
-	}
-
-	const format = originalMetadata.format as any
-
-	const low = await generateOptimizedImage({ buffer, level: OptimizationLevel.Low, format })
-	const medium = await generateOptimizedImage({ buffer, level: OptimizationLevel.Medium, format })
-	const high = await generateOptimizedImage({ buffer, level: OptimizationLevel.High, format })
-
-	const metadatas = await Promise.all([
-		sharp(low).metadata(),
-		sharp(medium).metadata(),
-		sharp(high).metadata(),
-	]);
-
-
-	console.log({ metadatas })
-
 }
 
 async function runWorker() {
@@ -132,8 +188,8 @@ async function runWorker() {
 		exchange: envs.RABBITMQ_EXCHANGE
 	})
 
-	// messageBroker.listenToQueue(envs.RABBITMQ_QUEUE, handler)
-	await processImage({ properties: { headers: {} }, content: { id: "27161098-4ee2-4875-a49c-612b1e324a8e" } })
+	messageBroker.listenToQueue(envs.RABBITMQ_QUEUE, processImage)
+	// await processImage({ properties: { headers: {} }, content: { id: "27161098-4ee2-4875-a49c-612b1e324a8e" } })
 }
 
 if (require.main) {

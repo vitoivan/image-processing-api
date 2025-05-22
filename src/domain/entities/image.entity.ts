@@ -44,11 +44,19 @@ class ImageEntity {
 		}
 	}
 
-	getOriginalFilePath(): string {
+	getOriginalStoragePath(): string {
 		const splitted = this.originalMetadata?.mimetype?.split("/") || this.originalFilename.split(".")
-		return `${this.taskId}.${splitted[splitted.length - 1]}`
+		const extension = splitted[splitted.length - 1]
+		return `${this.taskId}.${extension}`
+	}
+
+	getOptimizedStoragePath(level: "low" | "medium" | "high_optimized"): string {
+		const originalPath = this.getOriginalStoragePath()
+		const splitted = originalPath.split(".")
+		const extension = splitted[splitted.length - 1]
+		return `${this.taskId}-${level}.${extension}`
 	}
 }
 
 
-export { ImageEntity }
+export { ImageEntity, Version }
